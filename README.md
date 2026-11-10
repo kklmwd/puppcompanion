@@ -35,7 +35,8 @@ npm run dist
 
 ## Changing the art
 
-Green-screen renders live in `art/raw`. After replacing one, regenerate the
+Green-screen renders live in `art/raw` (one pose per image) and
+`art/raw/sheets` (animation sheets: 8-frame walk cycle, 4-frame fall and landing). After replacing one, regenerate the
 pixel-art sprites in `assets/`:
 
 ```bash

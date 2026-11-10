@@ -1,6 +1,18 @@
-const POSES = ['sit', 'blink', 'happy', 'walk1', 'sleep', 'held'];
 const PIXEL = 3;   // screen pixels per sprite pixel
-const POSE_FOR = { sit: 'sit', walk: 'walk1', sleep: 'sleep', happy: 'happy', held: 'held', fall: 'held' };
+const seq = (name, n) => Array.from({ length: n }, (_, i) => name + (i + 1));
+
+// frames per state: [frame names, milliseconds per frame]
+const ANIMS = {
+  sit: [['sit'], 0],
+  happy: [['happy'], 0],
+  held: [['held'], 0],
+  walk: [seq('walk', 8), 95],
+  fall: [['fall1', 'fall2'], 100],
+  sleep: [['sleep1', 'sleep1', 'sleep2', 'sleep3', 'sleep3', 'sleep2'], 520],
+};
+// played once after hitting the ground: [frame, milliseconds]
+const LANDING = [['splat', 520], ['dazed', 750]];
+const POSES = [...new Set([...Object.values(ANIMS).flatMap(([f]) => f), ...LANDING.map(([f]) => f), 'blink'])];
 
 const stage = document.getElementById('stage');
 const flip = document.getElementById('flip');
@@ -45,6 +57,30 @@ function particle(cls, text) {
   el.addEventListener('animationend', () => el.remove());
 }
 
+// ---------- frame animation ----------
+let animTimer, landing = false;
+function play(name) {
+  clearTimeout(animTimer);
+  landing = name === 'landing';
+  if (landing) {
+    let i = 0;
+    const step = () => {
+      if (i === LANDING.length) { landing = false; return play(state); }
+      const [frame, ms] = LANDING[i++];
+      show(frame);
+      animTimer = setTimeout(step, ms);
+    };
+    return step();
+  }
+  const [frames, ms] = ANIMS[name];
+  let i = 0;
+  const step = () => {
+    show(frames[i++ % frames.length]);
+    if (frames.length > 1) animTimer = setTimeout(step, ms);
+  };
+  step();
+}
+
 let bubbleTimer;
 function say(text) {
   bubble.textContent = text;
@@ -59,11 +95,7 @@ window.pup.onUpdate((d) => {
   if (d.state !== state || !sprite.src) {
     state = d.state;
     stage.className = state;
-    show(POSE_FOR[state]);
-  }
-  if (d.land) {
-    stage.classList.add('land');
-    setTimeout(() => stage.classList.remove('land'), 340);
+    play(d.land ? 'landing' : state);
   }
   if (d.hearts) for (let i = 0; i < 5; i++) setTimeout(() => particle('heart', '♥'), i * 160);
   if (d.bubble) say(d.bubble);
@@ -73,7 +105,7 @@ window.pup.onUpdate((d) => {
 setInterval(() => {
   if (state === 'sit' && pose === 'sit' && Math.random() < 0.3) {
     show('blink');
-    setTimeout(() => { if (state === 'sit') show('sit'); }, 190);
+    setTimeout(() => { if (pose === 'blink') show('sit'); }, 190);
   }
 }, 1000);
 setInterval(() => { if (state === 'sleep') particle('zed', 'z'); }, 1400);

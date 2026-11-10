@@ -82,7 +82,7 @@ function tick() {
     pup.x = c.x + pup.grab.dx; pup.y = c.y + pup.grab.dy;
   } else if (pup.state === 'fall') {
     pup.vy += 2600 * dt; pup.y += pup.vy * dt;
-    if (pup.y >= ground()) { pup.y = ground(); sit(); send({ land: true }); }
+    if (pup.y >= ground()) { pup.y = ground(); enter('sit', rand(4000, 8000)); send({ land: true }); }
   } else {
     pup.y = ground();
     if (pup.state === 'walk') {

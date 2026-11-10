@@ -1,4 +1,8 @@
-"""Turn the green-screen renders in art/raw into pixel-art sprites in assets/."""
+"""Turn the green-screen renders in art/raw into pixel-art sprites in assets/.
+
+art/raw/*.png         one pose per image
+art/raw/sheets/*.png  several animation frames per image (read row by row)
+"""
 import sys
 from pathlib import Path
 import numpy as np
@@ -7,69 +11,159 @@ from scipy import ndimage
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW, OUT = ROOT / "art" / "raw", ROOT / "assets"
-CELL = 24      # raw pixels per pixel-art pixel (the app shows each one 3x)
-COLORS = 24    # shared palette size
+CELL = 24      # raw pixels per pixel-art pixel for single poses (the app shows each one 3x)
+COLORS = 32    # shared palette size
 OUTLINE = (74, 40, 24, 255)
+# sheets: frame count, and how tall (in sprite pixels) a reference frame should end up
+SHEETS = {
+    "walk": {"frames": 8, "height": 62, "ref": None, "align": "body"},   # ref None = average frame
+    "fall": {"frames": 4, "height": 74, "ref": 3, "names": ["fall1", "fall2", "splat", "dazed"]},
+}
 
 
 def key(path):
+    """Green screen -> RGBA with soft alpha and green spill removed."""
     rgb = np.asarray(Image.open(path).convert("RGB")).astype(np.float32)
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     spill = g - np.maximum(r, b)              # how much greener than anything else
     alpha = np.clip(1.0 - (spill - 20) / 60, 0, 1)
-    # keep only the biggest blob; erode first so thin bridges to stray artifacts break
-    core = ndimage.binary_erosion(alpha > 0.5, iterations=10)
+    alpha = np.minimum(alpha, ndimage.minimum_filter(alpha, 3))  # shave 1px halo
+    g2 = np.where(spill > 0, np.maximum(r, b), g)                # despill
+    return np.dstack([r, g2, b, alpha * 255]).astype(np.uint8)
+
+
+def biggest_blob(rgba):
+    """Keep only the main figure; erode first so thin bridges to stray artifacts break."""
+    alpha = rgba[..., 3]
+    core = ndimage.binary_erosion(alpha > 127, iterations=10)
     labels, n = ndimage.label(core)
     if n > 1:
         sizes = ndimage.sum(np.ones_like(labels), labels, range(1, n + 1))
         keep = labels == (1 + int(np.argmax(sizes)))
-        alpha = alpha * ndimage.binary_dilation(keep, iterations=13)
-    alpha = np.minimum(alpha, ndimage.minimum_filter(alpha, 3))  # shave 1px halo
-    g2 = np.where(spill > 0, np.maximum(r, b), g)                # despill
-    out = np.dstack([r, g2, b, alpha * 255]).astype(np.uint8)
-    return Image.fromarray(out, "RGBA")
+        rgba = rgba.copy()
+        rgba[..., 3] = alpha * ndimage.binary_dilation(keep, iterations=13)
+    return rgba
 
 
-def pixelate(im):
-    """Shrink to chunky pixels with hard edges."""
-    w, h = max(1, round(im.width / CELL)), max(1, round(im.height / CELL))
-    arr = np.asarray(im).astype(np.float32)
+def bbox(rgba):
+    ys, xs = np.where(rgba[..., 3] > 8)
+    return xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+
+
+def crop(rgba, box):
+    x0, y0, x1, y1 = box
+    return rgba[y0:y1, x0:x1]
+
+
+def split_sheet(rgba, count):
+    """Cut a sheet into its figures, ordered row by row then left to right."""
+    labels, n = ndimage.label(rgba[..., 3] > 127)
+    sizes = ndimage.sum(np.ones_like(labels), labels, range(1, n + 1))
+    top = np.argsort(sizes)[::-1][:count] + 1
+    if len(top) < count:
+        raise SystemExit(f"expected {count} figures, found {len(top)}")
+    slices = ndimage.find_objects(labels)
+    figs = []
+    for lab in top:
+        sl = slices[lab - 1]
+        part = rgba[sl].copy()
+        part[..., 3] = np.where(labels[sl] == lab, part[..., 3], 0)
+        figs.append((sl[0].start, sl[0].stop, sl[1].start, part))
+    row_h = max(b - a for a, b, _, _ in figs)
+    first = min((a + b) / 2 for a, b, _, _ in figs)
+    figs.sort(key=lambda f: (round(((f[0] + f[1]) / 2 - first) / row_h), f[2]))
+    return [f[3] for f in figs]
+
+
+def pixelate(rgba, cell):
+    """Shrink to chunky pixels with hard edges. Returns (rgb float, mask)."""
+    h, w = rgba.shape[:2]
+    w2, h2 = max(1, round(w / cell)), max(1, round(h / cell))
+    arr = rgba.astype(np.float32)
     a = arr[..., 3:4] / 255
     pre = Image.fromarray(np.dstack([arr[..., :3] * a, arr[..., 3:]]).astype(np.uint8), "RGBA")
-    small = np.asarray(pre.resize((w, h), Image.BOX)).astype(np.float32)
+    small = np.asarray(pre.resize((w2, h2), Image.BOX)).astype(np.float32)
     sa = small[..., 3:4] / 255
     rgb = np.where(sa > 0, small[..., :3] / np.maximum(sa, 1e-3), 0)
     return np.clip(rgb, 0, 255), sa[..., 0] >= 0.5
 
 
+def on_canvas(frames, align):
+    """Pad frames to one size, feet on the bottom edge, so swapping them never jitters."""
+    def anchor(mask):
+        if align == "body":   # centre of the upper body: legs can swing without moving it
+            return np.where(mask[: mask.shape[0] // 2])[1].mean()
+        return mask.shape[1] / 2
+    anchors = [anchor(m) for _, m in frames]
+    left = int(np.ceil(max(anchors)))
+    right = int(np.ceil(max(m.shape[1] - a for (_, m), a in zip(frames, anchors))))
+    height = max(m.shape[0] for _, m in frames)
+    out = []
+    for (rgb, mask), a in zip(frames, anchors):
+        h, w = mask.shape
+        x, y = left - int(round(a)), height - h
+        big_rgb = np.zeros((height, left + right, 3), np.float32)
+        big_mask = np.zeros((height, left + right), bool)
+        big_rgb[y:y + h, x:x + w], big_mask[y:y + h, x:x + w] = rgb, mask
+        out.append((big_rgb, big_mask))
+    return out
+
+
+def breathe(rgb, mask, rise):
+    """Sleeping breath: lift the top of the back by `rise` pixels."""
+    r = max(1, round(mask.shape[0] * 0.15))
+    rows = list(range(r)) + [r] * rise + list(range(r, mask.shape[0]))
+    return rgb[rows], mask[rows]
+
+
 def outline(rgba):
-    """Add a 1px dark outline around the silhouette."""
     padded = np.pad(rgba, ((1, 1), (1, 1), (0, 0)))
     solid = padded[..., 3] > 0
-    edge = ndimage.binary_dilation(solid) & ~solid
-    padded[edge] = OUTLINE
+    padded[ndimage.binary_dilation(solid) & ~solid] = OUTLINE
     return padded
 
 
 def main():
     OUT.mkdir(exist_ok=True)
-    keyed, boxes = {}, {}
+    for old in OUT.glob("*.png"):
+        old.unlink()
+    sprites = {}
+
+    # single poses
+    sit_box = None
     for src in sorted(RAW.glob("*.png"), key=lambda p: p.stem != "sit"):  # sit first
-        im = key(src)
-        boxes[src.stem] = im.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+        rgba = biggest_blob(key(src))
+        if src.stem == "sit":
+            sit_box = bbox(rgba)
         # blink is the sit frame with closed eyes: share its box so it doesn't jitter
-        keyed[src.stem] = im.crop(boxes["sit"] if src.stem == "blink" else boxes[src.stem])
+        sprites[src.stem] = pixelate(crop(rgba, sit_box if src.stem == "blink" else bbox(rgba)), CELL)
 
-    small = {name: pixelate(im) for name, im in keyed.items()}
+    # animation sheets
+    for name, cfg in SHEETS.items():
+        figs = split_sheet(key(RAW / "sheets" / f"{name}.png"), cfg["frames"])
+        ref = np.mean([f.shape[0] for f in figs]) if cfg["ref"] is None else figs[cfg["ref"]].shape[0]
+        frames = [pixelate(f, ref / cfg["height"]) for f in figs]
+        names = cfg.get("names") or [f"{name}{i + 1}" for i in range(len(frames))]
+        if cfg.get("align"):
+            frames = on_canvas(frames, cfg["align"])
+        sprites.update(zip(names, frames))
+    for name in ("splat", "dazed"):   # drawn facing right; everything else faces left
+        rgb, mask = sprites[name]
+        sprites[name] = rgb[:, ::-1], mask[:, ::-1]
+    sprites["fall1"], sprites["fall2"] = on_canvas([sprites["fall1"], sprites["fall2"]], "centre")
 
-    # one palette for every pose so colours never flicker between frames
-    pool = np.concatenate([rgb[mask] for rgb, mask in small.values()])
-    pool = np.clip((pool - 128) * 1.12 + 128, 0, 255).astype(np.uint8)   # a touch more contrast
+    # sleeping: three breath heights made from the one sleep pose
+    base = sprites.pop("sleep")
+    for i in range(3):
+        sprites[f"sleep{i + 1}"] = breathe(*base, i)
+
+    # one palette for every frame so colours never flicker
+    contrast = lambda rgb: np.clip((rgb - 128) * 1.12 + 128, 0, 255).astype(np.uint8)
+    pool = contrast(np.concatenate([rgb[mask] for rgb, mask in sprites.values()]))
     pal_img = Image.fromarray(pool[None], "RGB").quantize(COLORS, method=Image.MEDIANCUT, kmeans=4)
 
-    for name, (rgb, mask) in small.items():
-        rgb = np.clip((rgb - 128) * 1.12 + 128, 0, 255).astype(np.uint8)
-        q = Image.fromarray(rgb, "RGB").quantize(palette=pal_img, dither=Image.NONE).convert("RGB")
+    for name, (rgb, mask) in sorted(sprites.items()):
+        q = Image.fromarray(contrast(rgb), "RGB").quantize(palette=pal_img, dither=Image.NONE).convert("RGB")
         rgba = np.dstack([np.asarray(q), mask.astype(np.uint8) * 255])
         rgba[~mask] = 0
         out = Image.fromarray(outline(rgba), "RGBA")

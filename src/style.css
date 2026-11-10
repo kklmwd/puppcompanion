@@ -6,21 +6,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
 
 /* pixel-art motion: whole-pixel steps (1 sprite pixel = 3px), no smooth tweening */
 .sit #sprite { animation: breathe 2.4s steps(1) infinite; }
-.sleep #sprite { animation: breathe 3.6s steps(1) infinite; }
-.walk #sprite { animation: waddle .36s steps(1) infinite; }
 .happy #sprite { animation: bounce .32s steps(1) infinite; }
-.held #sprite, .fall #sprite { animation: dangle .9s steps(1) infinite; }
-.land #sprite { animation: squash .3s steps(1) 1; }
+.held #sprite { animation: dangle .9s steps(1) infinite; }
 
 @keyframes breathe { 0%, 100% { transform: none; } 50% { transform: translateY(3px); } }
-@keyframes waddle { 0%, 100% { transform: none; } 50% { transform: translateY(-6px); } }
 @keyframes bounce { 0%, 100% { transform: none; } 50% { transform: translateY(-12px); } }
 @keyframes dangle {
   0%, 100% { transform: translateX(-3px); }
   25%, 75% { transform: none; }
   50% { transform: translateX(3px); }
 }
-@keyframes squash { 0% { transform: scale(1.12, .84); } 50% { transform: scale(.96, 1.04); } 100% { transform: none; } }
 
 #fx { position: absolute; inset: 0; pointer-events: none; }
 .particle { position: absolute; font: 700 22px "Cascadia Mono", Consolas, monospace; animation: floatUp 1.8s steps(8) forwards; }

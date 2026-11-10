@@ -2,30 +2,30 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
 #stage { position: absolute; inset: 0; transform-origin: 50% 100%; }
 #flip { position: absolute; left: 50%; bottom: 0; transform-origin: 50% 100%; transform: translateX(-50%); }
 #flip.right { transform: translateX(-50%) scaleX(-1); }
-#sprite { display: block; transform-origin: 50% 100%; filter: drop-shadow(0 3px 3px rgba(60, 30, 10, .28)); }
+#sprite { display: block; transform-origin: 50% 100%; image-rendering: pixelated; }
 
-.sit #sprite, .happy #sprite { animation: breathe 3.2s ease-in-out infinite; }
-.sleep #sprite { animation: breathe 4.6s ease-in-out infinite; }
-.walk #sprite { animation: waddle .42s ease-in-out infinite; }
-.happy #sprite { animation: bounce .4s ease-in-out infinite; }
-.held #sprite, .fall #sprite { transform-origin: 50% 8%; animation: dangle 1.1s ease-in-out infinite; }
-.land #sprite { animation: squash .32s ease-out 1; }
+/* pixel-art motion: whole-pixel steps (1 sprite pixel = 3px), no smooth tweening */
+.sit #sprite { animation: breathe 2.4s steps(1) infinite; }
+.sleep #sprite { animation: breathe 3.6s steps(1) infinite; }
+.walk #sprite { animation: waddle .36s steps(1) infinite; }
+.happy #sprite { animation: bounce .32s steps(1) infinite; }
+.held #sprite, .fall #sprite { animation: dangle .9s steps(1) infinite; }
+.land #sprite { animation: squash .3s steps(1) 1; }
 
-@keyframes breathe { 50% { transform: scale(1.012, 1.028); } }
-@keyframes waddle {
-  0%, 100% { transform: translateY(0) rotate(-2.5deg); }
-  25% { transform: translateY(-5px) rotate(0); }
-  50% { transform: translateY(0) rotate(2.5deg); }
-  75% { transform: translateY(-5px) rotate(0); }
+@keyframes breathe { 0%, 100% { transform: none; } 50% { transform: translateY(3px); } }
+@keyframes waddle { 0%, 100% { transform: none; } 50% { transform: translateY(-6px); } }
+@keyframes bounce { 0%, 100% { transform: none; } 50% { transform: translateY(-12px); } }
+@keyframes dangle {
+  0%, 100% { transform: translateX(-3px); }
+  25%, 75% { transform: none; }
+  50% { transform: translateX(3px); }
 }
-@keyframes bounce { 50% { transform: translateY(-9px) scale(.99, 1.03); } }
-@keyframes dangle { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
-@keyframes squash { 0% { transform: scale(1.14, .8); } 60% { transform: scale(.97, 1.05); } 100% { transform: none; } }
+@keyframes squash { 0% { transform: scale(1.12, .84); } 50% { transform: scale(.96, 1.04); } 100% { transform: none; } }
 
 #fx { position: absolute; inset: 0; pointer-events: none; }
-.particle { position: absolute; font: 700 22px "Segoe UI", system-ui, sans-serif; animation: floatUp 1.8s ease-out forwards; }
-.particle.heart { color: #e8627a; text-shadow: 0 1px 0 #fff; }
-.particle.zed { color: #7d8fb8; text-shadow: 0 1px 0 #fff; animation-duration: 2.6s; }
+.particle { position: absolute; font: 700 22px "Cascadia Mono", Consolas, monospace; animation: floatUp 1.8s steps(8) forwards; }
+.particle.heart { color: #ff6b88; text-shadow: 2px 2px 0 #4a2818; }
+.particle.zed { color: #dfe8ff; text-shadow: 2px 2px 0 #4a2818; animation-duration: 2.6s; }
 @keyframes floatUp {
   0% { opacity: 0; transform: translate(0, 0) scale(.5); }
   20% { opacity: 1; }
@@ -33,16 +33,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
 }
 
 #bubble {
-  position: absolute; left: 50%; bottom: 240px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 250px; transform: translateX(-50%);
   max-width: 230px; width: max-content; padding: 9px 13px; box-sizing: border-box;
-  font: 600 13.5px/1.35 "Segoe UI", system-ui, sans-serif; color: #4a3220; text-align: center; text-wrap: balance;
-  background: #fff8ea; border: 2px solid #c98f55; border-radius: 16px;
-  box-shadow: 0 3px 0 rgba(120, 70, 30, .18);
-  animation: pop .25s ease-out;
+  font: 700 13px/1.35 "Cascadia Mono", Consolas, monospace; color: #4a2818; text-align: center; text-wrap: balance;
+  background: #fff8ea; border: 3px solid #4a2818;
+  box-shadow: 3px 3px 0 rgba(74, 40, 24, .45);
+  animation: pop .2s steps(3);
 }
 #bubble::after {
-  content: ""; position: absolute; left: 50%; bottom: -9px; width: 14px; height: 14px;
-  background: #fff8ea; border: solid #c98f55; border-width: 0 2px 2px 0;
+  content: ""; position: absolute; left: 50%; bottom: -9px; width: 12px; height: 12px;
+  background: #fff8ea; border: solid #4a2818; border-width: 0 3px 3px 0;
   transform: translateX(-50%) rotate(45deg);
 }
 @keyframes pop { from { opacity: 0; transform: translateX(-50%) scale(.7); } }

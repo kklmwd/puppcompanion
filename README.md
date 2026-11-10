@@ -1,9 +1,8 @@
 # Pupp Companion
 
-A wrinkly Shar-Pei puppy that lives on your Windows desktop, painted in a 3D
-Ghibli-style look.
+A wrinkly Shar-Pei puppy that lives on your Windows desktop, drawn in chunky pixel art.
 
-![poses](assets/sit.png)
+<img src="assets/icon.png" width="128" alt="Pupp Companion">
 
 ## What the puppy does
 
@@ -37,7 +36,7 @@ npm run dist
 ## Changing the art
 
 Green-screen renders live in `art/raw`. After replacing one, regenerate the
-transparent sprites in `assets/`:
+pixel-art sprites in `assets/`:
 
 ```bash
 pip install pillow numpy scipy

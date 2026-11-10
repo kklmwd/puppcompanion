@@ -1,4 +1,5 @@
 const POSES = ['sit', 'blink', 'happy', 'walk1', 'sleep', 'held'];
+const PIXEL = 3;   // screen pixels per sprite pixel
 const POSE_FOR = { sit: 'sit', walk: 'walk1', sleep: 'sleep', happy: 'happy', held: 'held', fall: 'held' };
 
 const stage = document.getElementById('stage');
@@ -29,7 +30,7 @@ function show(name) {
   pose = name;
   const img = images[name];
   sprite.src = img.src;
-  if (img.naturalWidth) sprite.style.width = img.naturalWidth / 2 + 'px';
+  if (img.naturalWidth) sprite.style.width = img.naturalWidth * PIXEL + 'px';
 }
 
 function particle(cls, text) {

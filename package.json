@@ -1,0 +1,27 @@
+{
+  "name": "puppcompanion",
+  "productName": "Pupp Companion",
+  "version": "1.0.0",
+  "description": "A wrinkly Shar-Pei puppy that lives on your desktop.",
+  "main": "src/main.js",
+  "author": "kklmwd",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.kklmwd.puppcompanion",
+    "files": ["src/**/*", "assets/**/*"],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.png"
+    },
+    "nsis": { "oneClick": true, "perMachine": false },
+    "portable": { "artifactName": "PuppCompanion-portable.exe" }
+  }
+}

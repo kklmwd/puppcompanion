@@ -20,6 +20,54 @@ SHEETS = {
     "fall": {"frames": 4, "height": 74, "ref": 3, "names": ["fall1", "fall2", "splat", "dazed"]},
 }
 
+# Ears are drawn smaller than in the renders. Each entry is (centre x, centre y, radius)
+# of an ear: full-image coordinates for single poses, frame coordinates for sheet frames.
+EAR_SCALE = 0.7
+EARS = {
+    "sit": [(1140, 360, 140), (385, 365, 95)],
+    "blink": [(1140, 360, 140), (385, 365, 95)],
+    "happy": [(1140, 360, 140), (385, 365, 95)],
+    "held": [(1215, 280, 110), (700, 285, 100)],
+    "sleep": [(1135, 1040, 130), (305, 1010, 95)],
+    "walk": [[(238, 60, 58)]] * 8,
+    "fall": [
+        [(55, 85, 95), (360, 45, 65)],
+        [(70, 140, 110), (340, 75, 85)],
+        [(340, 305, 75), (610, 255, 60)],
+        [(222, 118, 80), (505, 43, 50)],
+    ],
+}
+
+
+def shrink_ears(rgba, ears, scale=EAR_SCALE):
+    """Pinch each ear toward its centre so it ends up `scale` times its size.
+
+    Inside the ear the picture is scaled down; a ring around it stretches to fill
+    the gap, so the head and background stay continuous.
+    """
+    out = rgba.astype(np.float32)
+    out[..., :3] *= out[..., 3:] / 255          # premultiply so edges don't fringe
+    src = out.copy()
+    h, w = rgba.shape[:2]
+    for cx, cy, ear_r in ears:
+        outer = ear_r * 1.6
+        y0, y1 = max(0, int(cy - outer)), min(h, int(cy + outer) + 1)
+        x0, x1 = max(0, int(cx - outer)), min(w, int(cx + outer) + 1)
+        yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+        dx, dy = xx - cx, yy - cy
+        r = np.hypot(dx, dy)
+        inner = scale * ear_r
+        ring = ear_r + (r - inner) * (outer - ear_r) / (outer - inner)
+        from_r = np.where(r <= inner, r / scale, np.where(r < outer, ring, r))
+        k = np.where(r > 0, from_r / np.maximum(r, 1e-6), 1)
+        coords = [cy + dy * k, cx + dx * k]
+        for c in range(4):
+            out[y0:y1, x0:x1, c] = ndimage.map_coordinates(src[..., c], coords, order=1, mode="constant")
+        src = out.copy()
+    a = out[..., 3:]
+    out[..., :3] = np.where(a > 0, out[..., :3] * 255 / np.maximum(a, 1e-3), 0)
+    return np.clip(out, 0, 255).astype(np.uint8)
+
 
 def key(path):
     """Green screen -> RGBA with soft alpha and green spill removed."""
@@ -133,6 +181,8 @@ def main():
     sit_box = None
     for src in sorted(RAW.glob("*.png"), key=lambda p: p.stem != "sit"):  # sit first
         rgba = biggest_blob(key(src))
+        if src.stem in EARS:
+            rgba = shrink_ears(rgba, EARS[src.stem])
         if src.stem == "sit":
             sit_box = bbox(rgba)
         # blink is the sit frame with closed eyes: share its box so it doesn't jitter
@@ -141,6 +191,7 @@ def main():
     # animation sheets
     for name, cfg in SHEETS.items():
         figs = split_sheet(key(RAW / "sheets" / f"{name}.png"), cfg["frames"])
+        figs = [shrink_ears(f, ears) for f, ears in zip(figs, EARS[name])]
         ref = np.mean([f.shape[0] for f in figs]) if cfg["ref"] is None else figs[cfg["ref"]].shape[0]
         frames = [pixelate(f, ref / cfg["height"]) for f in figs]
         names = cfg.get("names") or [f"{name}{i + 1}" for i in range(len(frames))]
@@ -172,8 +223,10 @@ def main():
         if name == "sit":
             side = int(out.width * 0.64)
             face = out.crop((0, 0, side, side))
-            face.resize((256, 256), Image.NEAREST).save(OUT / "icon.png")
+            face.resize((512, 512), Image.NEAREST).save(OUT / "icon.png")
             face.resize((32, 32), Image.BOX).save(OUT / "tray.png")
+            face.resize((18, 18), Image.BOX).save(OUT / "tray-mac.png")
+            face.resize((36, 36), Image.BOX).save(OUT / "tray-mac@2x.png")
 
 
 if __name__ == "__main__":

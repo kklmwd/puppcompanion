@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, screen, ipcMain, powerMonitor, nativeIma
 const fs = require('fs');
 const path = require('path');
 
+const MAC = process.platform === 'darwin';
 const ASSETS = path.join(__dirname, '..', 'assets');
 const BASE_W = 300, BASE_H = 330;      // window size at 100% scale
 const TICK_MS = 33;
@@ -142,7 +143,7 @@ function buildMenu() {
       { label: 'Show one now', click: () => { nextReminder = 0; } },
     ] },
     { label: 'Size', submenu: [radio('Small', 'size', 0.7), radio('Medium', 'size', 1), radio('Large', 'size', 1.4)] },
-    { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
+    { label: MAC ? 'Start at login' : 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
       click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
@@ -171,6 +172,8 @@ app.whenReady().then(() => {
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  // macOS: no Dock icon (LSUIElement), and stay with you across Spaces and fullscreen apps
+  if (MAC) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, 'index.html'));
   win.once('ready-to-show', () => {
@@ -180,10 +183,11 @@ app.whenReady().then(() => {
     setTimeout(() => send({ bubble: 'Woof! I live here now 🐶' }), 800);
   });
 
-  tray = new Tray(nativeImage.createFromPath(path.join(ASSETS, 'tray.png')));
+  // macOS menu bar wants a small icon; tray-mac.png has an @2x sibling for Retina
+  tray = new Tray(nativeImage.createFromPath(path.join(ASSETS, MAC ? 'tray-mac.png' : 'tray.png')));
   tray.setToolTip('Pupp Companion');
   refreshMenu();
-  tray.on('click', () => pet());
+  if (!MAC) tray.on('click', () => pet());   // on macOS a click opens the menu
 
   ipcMain.on('ignore-mouse', (_e, ignore) => {
     if (pup.state === 'held') return;
